@@ -8,6 +8,7 @@ import shutil
 import sys
 import webbrowser as wb
 from functools import partial
+from PIL import Image
 
 try:
     from PyQt5.QtGui import *
@@ -47,6 +48,8 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
+from libs.dicom2png import dcm_to_png_no_save
+from libs.imageqt import toqimage
 
 __appname__ = 'labelImg'
 
@@ -449,12 +452,12 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.tools = self.toolbar('Tools')
         self.actions.beginner = (
-            open, open_dir, change_save_dir, open_next_image, open_prev_image, verify, save, save_format, None, create, copy, delete, None,
+            open, open_dir, change_save_dir, open_prev_image, open_next_image, verify, save, save_format, None, create, copy, delete, None,
             zoom_in, zoom, zoom_out, fit_window, fit_width, None,
             light_brighten, light, light_darken, light_org)
 
         self.actions.advanced = (
-            open, open_dir, change_save_dir, open_next_image, open_prev_image, save, save_format, None,
+            open, open_dir, change_save_dir, open_prev_image, open_next_image, save, save_format, None,
             create_mode, edit_mode, None,
             hide_all, show_all)
 
@@ -1282,6 +1285,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def scan_all_images(self, folder_path):
         extensions = ['.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
+        extensions.append('.dcm')
         images = []
 
         for root, dirs, files in os.walk(folder_path):
@@ -1455,6 +1459,7 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         path = os.path.dirname(ustr(self.file_path)) if self.file_path else '.'
         formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
+        formats.append("*.dcm")
         filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
         filename,_ = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
         if filename:
@@ -1675,10 +1680,18 @@ def inverted(color):
 
 def read(filename, default=None):
     try:
-        reader = QImageReader(filename)
-        reader.setAutoTransform(True)
-        return reader.read()
-    except:
+        # if dicom image, we need to convert to PIL image first
+        if filename.lower().endswith(".dcm"):
+            image_array = dcm_to_png_no_save(filename)
+            image_pil = Image.fromarray(image_array)
+            qimage = toqimage(image_pil)
+            return qimage
+        else:
+            reader = QImageReader(filename)
+            reader.setAutoTransform(True)
+            return reader.read()
+    except Exception as e:
+        print(e)
         return default
 
 
